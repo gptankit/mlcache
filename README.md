@@ -1,6 +1,10 @@
 ## Multi-Level Cache
 
-**mlcache** is a multi-level cache interface with multiple *read* and *write* patterns supported. Some features - 
+**mlcache** is a multi-level cache interface with multiple *read* and *write* patterns supported. 
+
+![mlcache](https://user-images.githubusercontent.com/16796393/120887201-21def100-c60f-11eb-9276-cdd0acca7f37.png)
+
+Some of the features available in *mlcache* - 
 
 - Arranging cache implementations in a **multi-level cache format**.
 - Option to choose from cache **read and write patterns**.
@@ -27,7 +31,9 @@ type Cacher interface {
 }
 ```
 
-Assuming `NewLnCacher()` is a user defined function that create a cache object satisfying `Cacher` interface and you have decided a read and write pattern combination that work best with your application setup, you can then go on to create the multi-level cacher and start using it - 
+Assuming `NewLnCacher()` is a user defined function that creates a cache object satisfying `Cacher` interface and you have decided a read and write pattern combination that work best with your application setup, you can then go on to create the multi-level cacher and start using it - 
+
+`func NewMultiLevelCache(readPattern ReadPattern, writePattern WritePattern, maxValSize int, caches ...Cacher) (Cacher, error)`
 
 ```
 l1Cache, l2Cache, l3Cache := NewL1Cacher(), NewL2Cacher(), NewL3Cacher() // and so on...
@@ -84,4 +90,6 @@ Below are *mlcache* benchmarks with frequently used read/write patterns. All tes
 | BenchmarkCacher/R6-16 |   2448288   |            496.4 ns/op |
 | BenchmarkCacher/W6-16 |   2102917   |            640.8 ns/op |
 
-The numbers suggest that *ReadThrough/WriteThrough* and *ReadThrough/WriteAround* perform considerably better than other patterns under heavy load. Although, all patterns are useful under different circumstances and must be carefully studied and chosen depending on the needs of the application.
+The numbers suggest that *ReadThrough/WriteThrough* and *ReadThrough/WriteAround* perform considerably better than other patterns under heavy load. Though, all patterns are useful under different circumstances and must be carefully studied and chosen depending on the needs of the application.
+
+Feel free to play around and post feedbacks
