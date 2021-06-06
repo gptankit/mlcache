@@ -14,11 +14,12 @@ func init() {
 	}
 }
 
+// CacheKey object wraps the actual cache key string
 type CacheKey struct {
 	key string
 }
 
-// NewCacheKey takes a key and an expiry time and returns a cache key object.
+// NewCacheKey takes a key and an expiry time and returns a cache key object
 func NewCacheKey(key string) *CacheKey {
 
 	cacheKey := pool.Get().(*CacheKey)

@@ -11,6 +11,7 @@ import (
 	"github.com/gptankit/mlcache/errs"
 )
 
+// Building a mock cacher object
 type mockCacher struct {
 	cache    map[string]*bytes.Buffer
 	cacheMtx *sync.Mutex
@@ -78,6 +79,7 @@ func (c *mockCacher) Flush() error {
 	return nil
 }
 
+// test case object
 type test struct {
 	id           uint8
 	readPattern  ReadPattern
@@ -93,6 +95,8 @@ type test struct {
 	assert       func(string, string) bool
 }
 
+// TestCacher creates 3 levels of mock caches and tests Put and subsequent Get operations.
+// All valid read/write pattern combinations are considered for testing.
 func TestCacher(t *testing.T) {
 
 	tests := createTestCases()
@@ -147,6 +151,8 @@ func TestCacher(t *testing.T) {
 	}
 }
 
+// BenchmarkCacher creates 3 levels of mock caches and benchmarks Put and subsequent Get operations.
+// All valid read/write pattern combinations are considered for benchmarking.
 func BenchmarkCacher(b *testing.B) {
 
 	tests := createTestCases()
@@ -184,6 +190,7 @@ func BenchmarkCacher(b *testing.B) {
 	}
 }
 
+// createTestCases creates appropriate test cases
 func createTestCases() []test {
 
 	return []test{

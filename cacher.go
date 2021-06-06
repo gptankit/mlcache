@@ -2,7 +2,6 @@ package mlcache
 
 import (
 	"bytes"
-	"math"
 	"time"
 
 	"github.com/gptankit/mlcache/errs"
@@ -21,6 +20,8 @@ const (
 	NoWorkableCacheFound  errs.ErrorMessage = "No workable cache found"
 	MaxCacheLevelExceeded errs.ErrorMessage = "Max cache level exceeded"
 	MaxValLenExceeded     errs.ErrorMessage = "Max val len exceeded"
+	InvalidReadPattern    errs.ErrorMessage = "Invalid read pattern"
+	InvalidWritePattern   errs.ErrorMessage = "Invalid write pattern"
 	GetError              errs.ErrorMessage = "Get error"
 	PutError              errs.ErrorMessage = "Put error"
 	DelError              errs.ErrorMessage = "Del error"
@@ -31,21 +32,32 @@ const (
 type ReadPattern uint8
 type WritePattern uint8
 
+// List of read patterns implemented
 const (
+	// Reads from all caches but backfills first
 	ReadThrough ReadPattern = iota
+	// Reads from all caches but backfills later
 	CacheAside
+	// End marker, no biggie
+	endR
 )
 
+// List of write patterns implemented
 const (
+	// Writes to all caches in a linear fashion
 	WriteThrough WritePattern = iota
+	// Writes to the last cache only
 	WriteAround
+	// Writes to the first cache while writing to other caches with slight delay
 	WriteBack
+	// End marker, no biggie
+	endW
 )
 
+// Max number of cahe levels allowed in the system
 const maxCaches uint8 = 5
-const MaxCacheValSize int = math.MaxInt32
 
-// Cacher is an interface for cache implementers
+// Cacher is an interface to be used by concrete cache implementation
 type Cacher interface {
 	// Get returns the cache item, if present
 	Get(key *CacheKey) (*bytes.Buffer, time.Time, error)
@@ -59,36 +71,44 @@ type Cacher interface {
 	Flush() error
 }
 
+// lCache is a doubly linked list of caches in the system
 type lCache struct {
 	cur  Cacher
 	prev *lCache
 	next *lCache
 }
 
+// cacher is multi-level cache object
 type cacher struct {
-	l1Cache      *lCache
-	lnCache      *lCache
-	numCaches    uint8
-	readPattern  ReadPattern
+	// Head lCache pointer
+	l1Cache *lCache
+	// Tail lCache pointer
+	lnCache *lCache
+	// Current number of caches
+	numCaches uint8
+	// Read pattern to be used while Get
+	readPattern ReadPattern
+	// Write pattern to be used while Put
 	writePattern WritePattern
-	maxValSize   int
+	// Cache value size cutoff
+	maxValSize int
 }
 
+// NewMultiLevelCache creates a new mlcache object.
+// It expects 0 < num(caches) <= maxCaches and pre-defined read/write patterns to be passed in.
 func NewMultiLevelCache(readPattern ReadPattern, writePattern WritePattern, maxValSize int, caches ...Cacher) (Cacher, error) {
 
 	numCaches := uint8(len(caches))
 
-	if numCaches == 0 { // if called with no cache parameters
-		return nil, errs.New(NoWorkableCacheFound)
-	} else if numCaches > maxCaches { // if called with more than maxCache limit
-		return nil, errs.New(MaxCacheLevelExceeded)
+	if err := validate(numCaches, readPattern, writePattern); err != nil {
+		return nil, err
 	}
 
-	ci := 0
+	ci := uint8(0)
 	eCache := &lCache{cur: caches[ci], prev: nil, next: nil}
 	sCache := eCache // save head
 	ci++
-	for ci < int(numCaches) {
+	for ci < numCaches {
 		eCache.next = &lCache{cur: caches[ci], prev: eCache, next: nil}
 		eCache = eCache.next
 		ci++
@@ -106,6 +126,7 @@ func NewMultiLevelCache(readPattern ReadPattern, writePattern WritePattern, maxV
 	return ca, nil
 }
 
+// Get executes a cache fetch given a key using pre-selected read pattern
 func (ca *cacher) Get(key *CacheKey) (*bytes.Buffer, time.Time, error) {
 
 	if key == nil {
@@ -156,6 +177,8 @@ func (ca *cacher) Get(key *CacheKey) (*bytes.Buffer, time.Time, error) {
 	return nil, time.Now().UTC(), nil
 }
 
+// Get executes a cache add/update given a key, val and expiry time using pre-selected write pattern.
+// It expects an absolute value of time (and not duration).
 func (ca *cacher) Put(key *CacheKey, val *bytes.Buffer, ttl time.Time) (CacheStatus, error) {
 
 	if key == nil {
@@ -206,7 +229,7 @@ func (ca *cacher) Put(key *CacheKey, val *bytes.Buffer, ttl time.Time) (CacheSta
 					}
 					upper = upper.next
 				}
-			}(200 * time.Millisecond)
+			}(200 * time.Millisecond) // write to higher level caches after waiting for this duration
 		}
 		return CacheStatusSuccess, nil
 	}
@@ -214,6 +237,7 @@ func (ca *cacher) Put(key *CacheKey, val *bytes.Buffer, ttl time.Time) (CacheSta
 	return CacheStatusSuccess, nil
 }
 
+// Del removes a cache item from all caches
 func (ca *cacher) Del(key *CacheKey) (CacheStatus, error) {
 
 	if key == nil {
@@ -234,6 +258,9 @@ func (ca *cacher) Del(key *CacheKey) (CacheStatus, error) {
 	return CacheStatusSuccess, nil
 }
 
+// IsPresent checks if a particular key exists or not.
+// It checks only in L1 cache assuming consistency between all cache levels.
+// All inconsistencies must be handled using Get/Put methods.
 func (ca *cacher) IsPresent(key *CacheKey) (CacheStatus, error) {
 
 	if key == nil {
@@ -250,6 +277,7 @@ func (ca *cacher) IsPresent(key *CacheKey) (CacheStatus, error) {
 	return CacheStatusSuccess, nil
 }
 
+// Flush clears all items from all cache levels
 func (ca *cacher) Flush() error {
 
 	this := ca.l1Cache
